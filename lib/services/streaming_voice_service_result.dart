@@ -10,11 +10,11 @@ extension StreamingVoiceResultHandling on StreamingVoiceService {
       _callback?.onCommand(VoiceCommand.scrollDown);
       return true;
     }
-    if (text.contains('底') && text.contains('回')) {
+    if (text.contains('最后一页') || text.contains('最后一夜')) {
       _callback?.onCommand(VoiceCommand.jumpToBottom);
       return true;
     }
-    if (text.contains('顶') && text.contains('回')) {
+    if (text.contains('第一页')) {
       _callback?.onCommand(VoiceCommand.jumpToTop);
       return true;
     }
@@ -172,14 +172,14 @@ extension StreamingVoiceResultHandling on StreamingVoiceService {
       _resumeAfterTts(); // 重置状态
       return;
     }
-    if (text.contains('底') && text.contains('回')) {
+    if (text.contains('最后一页') || text.contains('最后一夜')) {
       _awaitingConfirmation = false;
       _pendingQuestion = '';
       _callback?.onCommand(VoiceCommand.jumpToBottom);
       _resumeAfterTts(); // 重置状态
       return;
     }
-    if (text.contains('顶') && text.contains('回')) {
+    if (text.contains('第一页')) {
       _awaitingConfirmation = false;
       _pendingQuestion = '';
       _callback?.onCommand(VoiceCommand.jumpToTop);

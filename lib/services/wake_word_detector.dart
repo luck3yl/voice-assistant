@@ -112,7 +112,7 @@ class WakeWordDetector {
       });
       return;
     }
-    if (text.contains('底') && text.contains('回')) {
+    if (text.contains('最后一页') || text.contains('最后一夜')) {
       _triggered = true;
       _onCommand?.call('jumpToBottom');
       stop().then((_) {
@@ -120,7 +120,7 @@ class WakeWordDetector {
       });
       return;
     }
-    if (text.contains('顶') && text.contains('回')) {
+    if (text.contains('第一页')) {
       _triggered = true;
       _onCommand?.call('jumpToTop');
       stop().then((_) {

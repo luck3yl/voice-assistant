@@ -75,13 +75,13 @@ class _ConversationLayout extends StatelessWidget {
     } else if (voiceProvider.isListening) {
       text = '正在聆听...';
     } else if (chatProvider.isAnswering) {
-      text = '正在回答...\n翻页请说：\n"上一页"、"下一页"\n"回到顶部" 或 "回到底部"';
+      text = '正在回答...\n翻页请说：\n"上一页"、"下一页"\n"第一页" 或 "最后一页"';
     } else if (chatProvider.isRetrieving) {
       text = '正在检索...';
     } else if (chatProvider.isThinkingState || chatProvider.isThinking || voiceProvider.isProcessing) {
       text = '正在思考...';
     } else if (voiceProvider.isAwake) {
-      text = '继续提问请说:\n"下一个问题"\n翻页请说:\n"上一页"、"下一页"\n"回到顶部" 或 "回到底部"';
+      text = '继续提问请说:\n"下一个问题"\n翻页请说:\n"上一页"、"下一页"\n"第一页" 或 "最后一页"';
     }
 
     if (text.isEmpty) return const SizedBox.shrink();

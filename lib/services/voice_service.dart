@@ -55,8 +55,8 @@ enum VoiceCommand {
   clearChat,        // "清空对话"
   scrollUp,         // "往上翻"
   scrollDown,       // "往下翻"
-  jumpToBottom,     // "回到底部"
-  jumpToTop,        // "回到顶部"
+  jumpToBottom,     // "最后一页"
+  jumpToTop,        // "第一页"
 }
 
 /// 语音服务回调接口

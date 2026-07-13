@@ -418,7 +418,7 @@ class _JumpToBottomPromptState extends State<_JumpToBottomPrompt> with SingleTic
               const Icon(Icons.arrow_downward, color: Colors.white, size: 16),
               const SizedBox(width: 6),
               const Text(
-                '有新内容，回到底部',
+                '有新内容，前往最后一页',
                 style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
               ),
             ],
