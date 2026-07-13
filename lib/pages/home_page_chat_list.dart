@@ -29,14 +29,20 @@ class _ChatListState extends State<_ChatList> {
     super.dispose();
   }
 
+  double get _scrollStep {
+    if (!_scrollController.hasClients) return 0;
+    final viewport = _scrollController.position.viewportDimension;
+    // 留出 60 像素的重叠区域，防止文字被截断时下一页看不到
+    return viewport > 100 ? viewport - 60 : viewport;
+  }
+
   void scrollUp([VoiceService? voiceService]) {
     if (!_scrollController.hasClients) return;
     if (_scrollController.offset <= 1.0) {
       voiceService?.speak("已经是第一页了");
       return;
     }
-    final viewport = _scrollController.position.viewportDimension;
-    final target = (_scrollController.offset - viewport).clamp(
+    final target = (_scrollController.offset - _scrollStep).clamp(
         0.0, _scrollController.position.maxScrollExtent);
     _scrollController.animateTo(
       target,
@@ -51,8 +57,7 @@ class _ChatListState extends State<_ChatList> {
       voiceService?.speak("已经是最后一页了");
       return;
     }
-    final viewport = _scrollController.position.viewportDimension;
-    final target = (_scrollController.offset + viewport).clamp(
+    final target = (_scrollController.offset + _scrollStep).clamp(
         0.0, _scrollController.position.maxScrollExtent);
     _scrollController.animateTo(
       target,
@@ -81,20 +86,20 @@ class _ChatListState extends State<_ChatList> {
   int get _currentPage {
     if (!_scrollController.hasClients) return 0;
     final offset = _scrollController.offset;
-    final viewport = _scrollController.position.viewportDimension;
-    if (viewport == 0) return 0;
+    final step = _scrollStep;
+    if (step == 0) return 0;
 
     if (offset <= 1.0) return 0;
     
-    return (offset / viewport).ceil();
+    return (offset / step).ceil();
   }
 
   int get _totalPages {
     if (!_scrollController.hasClients) return 1;
     final maxScroll = _scrollController.position.maxScrollExtent;
-    final viewport = _scrollController.position.viewportDimension;
-    if (viewport == 0) return 1;
-    return (maxScroll / viewport).ceil() + 1;
+    final step = _scrollStep;
+    if (step == 0) return 1;
+    return (maxScroll / step).ceil() + 1;
   }
 
   @override
@@ -176,8 +181,7 @@ class _ChatListState extends State<_ChatList> {
                       enabled: _scrollController.hasClients && _scrollController.offset > 1.0,
                       onTap: () {
                         if (!_scrollController.hasClients) return;
-                        final viewport = _scrollController.position.viewportDimension;
-                        final target = (_scrollController.offset - viewport).clamp(
+                        final target = (_scrollController.offset - _scrollStep).clamp(
                             0.0, _scrollController.position.maxScrollExtent);
                         _scrollController.animateTo(
                           target,
@@ -203,8 +207,7 @@ class _ChatListState extends State<_ChatList> {
                       enabled: _scrollController.hasClients && _scrollController.offset < _scrollController.position.maxScrollExtent - 1.0,
                       onTap: () {
                         if (!_scrollController.hasClients) return;
-                        final viewport = _scrollController.position.viewportDimension;
-                        final target = (_scrollController.offset + viewport).clamp(
+                        final target = (_scrollController.offset + _scrollStep).clamp(
                             0.0, _scrollController.position.maxScrollExtent);
                         _scrollController.animateTo(
                           target,
@@ -288,7 +291,29 @@ class _ChatListState extends State<_ChatList> {
                                 )
                               : const SizedBox.shrink(),
                         )
-                      : SingleChildScrollView(
+                      : ShaderMask(
+                          shaderCallback: (Rect bounds) {
+                            final topFade = 30.0 / bounds.height;
+                            final bottomFade = 30.0 / bounds.height;
+                            return LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: const [
+                                Colors.transparent,
+                                Colors.white,
+                                Colors.white,
+                                Colors.transparent,
+                              ],
+                              stops: [
+                                0.0,
+                                topFade.clamp(0.0, 1.0),
+                                (1.0 - bottomFade).clamp(0.0, 1.0),
+                                1.0,
+                              ],
+                            ).createShader(bounds);
+                          },
+                          blendMode: BlendMode.dstIn,
+                          child: SingleChildScrollView(
                             controller: _scrollController,
                             physics: const NeverScrollableScrollPhysics(), // 只能通过按钮/语音翻页
                             child: Column(
@@ -301,7 +326,8 @@ class _ChatListState extends State<_ChatList> {
                                 );
                               }).toList(),
                             ),
-                          );
+                          ),
+                        );
                 },
               ),
             ),
