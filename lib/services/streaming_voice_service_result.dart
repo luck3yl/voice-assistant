@@ -146,6 +146,10 @@ extension StreamingVoiceResultHandling on StreamingVoiceService {
     final question = _extractAfterWakeWord(text);
     _resetPartialBuffer();
 
+    if (text.contains('下一个问题')) {
+      _callback?.onCommand(VoiceCommand.clearChat);
+    }
+
     if (question.isEmpty) {
       // 纯唤醒词，根据具体词语给不同应答
       speak(text.contains('下一个问题') ? '请说' : '我在');
@@ -277,6 +281,10 @@ extension StreamingVoiceResultHandling on StreamingVoiceService {
     
     _log('WAKE triggered, after="$after"');
     final question = _extractAfterWakeWord(after).trim();
+
+    if (after.contains('下一个问题')) {
+      _callback?.onCommand(VoiceCommand.clearChat);
+    }
 
     _startSleepTimer();
 

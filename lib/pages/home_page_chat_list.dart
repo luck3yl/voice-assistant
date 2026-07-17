@@ -289,7 +289,30 @@ class _ChatListState extends State<_ChatList> {
                                     ],
                                   ),
                                 )
-                              : const SizedBox.shrink(),
+                              : (widget.voiceProvider.isAwake 
+                                ? Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: AppTheme.accentColor.withOpacity(0.5),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      const Text(
+                                        '等待语音输入...',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          color: Colors.white54,
+                                          letterSpacing: 2,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : const SizedBox.shrink()),
                         )
                       : ShaderMask(
                           shaderCallback: (Rect bounds) {

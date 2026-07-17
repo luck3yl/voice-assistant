@@ -69,56 +69,136 @@ class _ConversationLayout extends StatelessWidget {
   }
 
   Widget _buildStatusText(ChatProvider chatProvider) {
-    String text = '';
     if (voiceProvider.isConfirming) {
-      text = '等待确认发送...\n确认请说："发送"\n想要修改请说："取消"';
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildSimpleText('等待确认发送...'),
+          const SizedBox(height: 12),
+          _buildVoiceCommandsPanel(['发送', '取消']),
+        ],
+      );
     } else if (voiceProvider.isListening) {
-      text = '正在聆听...';
+      return _buildSimpleText('正在聆听...');
     } else if (chatProvider.isAnswering) {
-      text = '正在回答...\n翻页请说：\n"上一页"、"下一页"\n"第一页" 或 "最后一页"';
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildSimpleText('正在回答...'),
+          const SizedBox(height: 12),
+          _buildVoiceCommandsPanel(['上一页', '下一页', '第一页', '最后一页']),
+        ],
+      );
     } else if (chatProvider.isRetrieving) {
-      text = '正在检索...';
+      return _buildSimpleText('正在检索...');
     } else if (chatProvider.isThinkingState || chatProvider.isThinking || voiceProvider.isProcessing) {
-      text = '正在思考...';
+      return _buildSimpleText('正在思考...');
     } else if (voiceProvider.isAwake) {
-      text = '继续提问请说:\n"下一个问题"\n翻页请说:\n"上一页"、"下一页"\n"第一页" 或 "最后一页"';
+      return _buildVoiceCommandsPanel(['下一个问题', '上一页', '下一页', '第一页', '最后一页']);
     }
 
-    if (text.isEmpty) return const SizedBox.shrink();
+    return const SizedBox.shrink();
+  }
 
-    List<InlineSpan> spans = [];
-    final RegExp regex = RegExp(r'("[^"]+")');
-    final matches = regex.allMatches(text);
-    
-    int lastMatchEnd = 0;
-    for (var match in matches) {
-      if (match.start > lastMatchEnd) {
-        spans.add(TextSpan(text: text.substring(lastMatchEnd, match.start)));
-      }
-      spans.add(TextSpan(
-        text: match.group(0),
-        style: const TextStyle(
-          fontSize: 18, // 放大指令字体
-          fontWeight: FontWeight.w900, // 加粗指令
-        ),
-      ));
-      lastMatchEnd = match.end;
-    }
-    if (lastMatchEnd < text.length) {
-      spans.add(TextSpan(text: text.substring(lastMatchEnd)));
-    }
-
-    return Text.rich(
-      TextSpan(
-        style: TextStyle(
-          fontSize: 16, // 基础描述文字大小
-          fontWeight: FontWeight.w600,
-          color: AppTheme.accentColor,
-          height: 1.6,
-        ),
-        children: spans,
+  Widget _buildSimpleText(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        color: AppTheme.accentColor,
+        height: 1.6,
       ),
       textAlign: TextAlign.center,
+    );
+  }
+
+  Widget _buildVoiceCommandsPanel(List<String> commands) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 240),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF050B14).withOpacity(0.65), // Darker glass background for better contrast
+              border: Border.all(
+                color: Colors.white.withOpacity(0.12),
+                width: 1,
+              ),
+              borderRadius: BorderRadius.circular(16),
+            ),
+      child: IntrinsicWidth(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.mic,
+                  size: 18,
+                  color: AppTheme.accentColor, // Changed back to blue
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '用户语音指令',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: AppTheme.accentColor, // Changed back to blue
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ...commands.asMap().entries.map((entry) {
+            final isLast = entry.key == commands.length - 1;
+            return Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 8.0),
+              child: _buildCommandTag(entry.value),
+            );
+          }),
+        ],
+      ),
+      ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommandTag(String command) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withOpacity(0.2), // Distinct soft background
+        borderRadius: BorderRadius.circular(4), // Small border radius
+      ),
+      alignment: Alignment.center, // Center text inside the stretched tag
+      child: Text(
+        '"$command"',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: Colors.white, // Changed to white as requested for prominence
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 }

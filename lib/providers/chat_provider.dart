@@ -10,6 +10,8 @@ class ChatProvider extends ChangeNotifier {
   bool _isRetrieving = false;
   bool _isThinkingState = false;
 
+  bool _hasEverChatted = false;
+
   /// 自增序号，保证每条消息 id 唯一（避免同毫秒创建导致 id 冲突）
   int _seq = 0;
 
@@ -21,6 +23,7 @@ class ChatProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isRetrieving => _isRetrieving;
   bool get isThinkingState => _isThinkingState;
+  bool get hasEverChatted => _hasEverChatted;
 
   /// 正在输出答案（最后一条 AI 消息未完成且已有答案内容）
   bool get isAnswering {
@@ -51,6 +54,7 @@ class ChatProvider extends ChangeNotifier {
 
   /// 添加用户消息
   void addUserMessage(String content, {bool isVoice = true}) {
+    _hasEverChatted = true;
     _messages.add(ChatMessage(
       id: _nextId(),
       role: MessageRole.user,

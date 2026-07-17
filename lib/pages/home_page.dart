@@ -1,4 +1,5 @@
 
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -180,7 +181,7 @@ class _HomePageState extends State<HomePage> implements VoiceServiceCallback {
                 // 用户开始说话时立即切换到对话布局，使流式识别文字
                 // 显示在对话区的底部，而不是停留在待机首页
                 final hasConversation =
-                    hasHistory || voiceProvider.isListening || voiceProvider.isConfirming;
+                    hasHistory || voiceProvider.isListening || voiceProvider.isConfirming || chatProvider.hasEverChatted;
 
                 if (hasConversation) {
                   return _ConversationLayout(

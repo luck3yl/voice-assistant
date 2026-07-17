@@ -18,7 +18,7 @@ class AsrConfig {
 
   // === WebSocket 地址 ===
   /// 实时识别 WebSocket 地址（后端实时转写流式接口）
-  static const String wsEndpoint = 'ws://192.168.193.3:8082/ws/transcribe';
+  static const String wsEndpoint = 'ws://47.121.133.67/api/wugang-stt/ws/transcribe';
 
   /// 唤醒前 partial 停止更新多久清空累积缓冲（毫秒）。
   /// 仅用于唤醒前避免噪音识别越积越多，不参与断句（断句由后端 final 决定）。
