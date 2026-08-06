@@ -38,8 +38,11 @@ class _IdleLayout extends StatelessWidget {
                   ),
                 const SizedBox(height: 24),
 
-                // 语音球 + 两侧声波
-                const CenterMicOrb(),
+                // 语音球 + 两侧声波（支持点击手动唤醒）
+                GestureDetector(
+                  onTap: () => voiceProvider.onWakeUp(),
+                  child: const CenterMicOrb(),
+                ),
                 const SizedBox(height: 14),
 
                 // 状态文字
@@ -48,7 +51,6 @@ class _IdleLayout extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: (!voiceProvider.isListening && 
-                             !voiceProvider.isConfirming && 
                              !voiceProvider.isProcessing) ? 24 : 18,
                     fontWeight: FontWeight.bold,
                     color: AppTheme.accentColor,
@@ -115,7 +117,6 @@ class _IdleLayout extends StatelessWidget {
 
   String _getStatusText() {
     if (voiceProvider.isListening) return '正在聆听...';
-    if (voiceProvider.isConfirming) return '等待确认...';
     if (voiceProvider.isProcessing) return '正在思考...';
     if (voiceProvider.isAwake) return '我在听，请说';
     return '等待唤醒...';
@@ -305,13 +306,12 @@ class _OnlineStatus extends StatelessWidget {
 }
 
 // =============================================
-// 实时识别气泡 - 边说边显示正在识别的文字，以及等待确认时的文字
+// 实时识别气泡 - 边说边显示正在识别的文字
 // =============================================
 class _LiveRecognitionBubble extends StatelessWidget {
   final String text;
-  final bool isConfirming;
 
-  const _LiveRecognitionBubble({required this.text, this.isConfirming = false});
+  const _LiveRecognitionBubble({required this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -321,14 +321,10 @@ class _LiveRecognitionBubble extends StatelessWidget {
         margin: const EdgeInsets.fromLTRB(40, 4, 20, 10),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isConfirming 
-              ? Colors.orange.withValues(alpha: 0.2) 
-              : AppTheme.primaryColor.withValues(alpha: 0.18),
+          color: AppTheme.primaryColor.withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isConfirming 
-                ? Colors.orange.withValues(alpha: 0.5)
-                : AppTheme.accentColor.withValues(alpha: 0.5),
+            color: AppTheme.accentColor.withValues(alpha: 0.5),
             width: 1.2,
           ),
         ),
@@ -336,7 +332,6 @@ class _LiveRecognitionBubble extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            if (!isConfirming)
               // 跳动的小圆点，表示正在识别
               Container(
                 width: 7,
@@ -346,18 +341,13 @@ class _LiveRecognitionBubble extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: AppTheme.accentColor,
                 ),
-              )
-            else
-              Container(
-                margin: const EdgeInsets.only(right: 8),
-                child: const Icon(Icons.error_outline, size: 16, color: Colors.orange),
               ),
             Flexible(
               child: Text(
                 text,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 15,
-                  color: isConfirming ? Colors.orange[100] : Colors.white,
+                  color: Colors.white,
                   height: 1.4,
                 ),
               ),

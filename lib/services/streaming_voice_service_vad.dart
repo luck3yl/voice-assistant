@@ -37,20 +37,8 @@ extension StreamingVoiceVAD on StreamingVoiceService {
 
   /// 静音 2 秒 → 发 done，等后端 final
   void _vadTick() {
-    // 如果没有在使用本地唤醒，并且处于待机推流状态，也允许触发 done 来截断唤醒词
-    final canTrigger = _isAwake || (!_useLocalWake && _isListening);
-    if (!canTrigger ||
-        _isSpeaking ||
-        _awaitingReply ||
-        _awaitingFinal ||
-        !_hasSpoken) {
-      return;
-    }
-    final silenceMs = DateTime.now().difference(_lastVoiceAt).inMilliseconds;
-    if (silenceMs >= AsrConfig.vadSilenceMs) {
-      _log('VAD: 静音 ${silenceMs}ms (>=${AsrConfig.vadSilenceMs}) → 发 done');
-      _sendDone();
-    }
+    // 老板要求：不再根据静音时长自动结束识别，用户想停顿多久都可以。
+    // 直到用户明确说出“发送”等指令时才会停止。
   }
 
   void _sendDone() {
@@ -58,18 +46,28 @@ extension StreamingVoiceVAD on StreamingVoiceService {
     _awaitingFinal = true;
     try {
       _channel?.sink.add(AsrConfig.doneMessage);
-      _log('sent done (等后端 final...)');
+      _log('sent done (后端不再返回 final，等待 500ms 后前端主动提交...)');
     } catch (e) {
       _log('send done error: $e');
     }
-    // 兜底：后端迟迟不返回 final，视为无效会话直接退回休眠
+    
+    // 后端不再返回 final。我们在发完 done 后，稍等 500ms（让可能在途的最后一个 confirm 收完），然后直接前端自己提交。
     _finalFallbackTimer?.cancel();
     _finalFallbackTimer = Timer(
-      const Duration(milliseconds: AsrConfig.finalTimeoutMs),
+      const Duration(milliseconds: 500),
       () {
         if (!_awaitingFinal) return;
-        _log('final 超时，放弃提交并退回休眠');
-        _enterIdle();
+        _awaitingFinal = false;
+        
+        final text = (_committed + _currentSeg).trim();
+        if (text.isEmpty) {
+          _log('主动提交：内容为空，退回休眠');
+          _enterIdle();
+          return;
+        }
+        
+        _log('主动提交：$text');
+        _submitFinalText(text);
       },
     );
   }

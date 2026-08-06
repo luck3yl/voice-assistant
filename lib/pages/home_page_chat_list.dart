@@ -130,11 +130,9 @@ class _ChatListState extends State<_ChatList> {
         final liveText = widget.voiceProvider.recognizedText;
         final pendingText = widget.voiceProvider.pendingQuestion;
         
-        final showLive =
-            (widget.voiceProvider.isListening || widget.voiceProvider.isConfirming) && liveText.isNotEmpty;
-        final showConfirm = widget.voiceProvider.isConfirming && pendingText.isNotEmpty;
+        final showLive = widget.voiceProvider.isListening && liveText.isNotEmpty;
 
-        if (messagePairs.isEmpty && !showLive && !showConfirm) {
+        if (messagePairs.isEmpty && !showLive) {
           return const SizedBox.shrink();
         }
 
@@ -228,7 +226,7 @@ class _ChatListState extends State<_ChatList> {
                   return messagePairs.isEmpty
                       // 首次说话还没有历史：居中展示流式识别文字
                       ? Center(
-                          child: (showLive || showConfirm)
+                          child: showLive
                               ? Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 32),
                                   child: Column(
@@ -237,12 +235,6 @@ class _ChatListState extends State<_ChatList> {
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          if (showConfirm)
-                                            const Padding(
-                                              padding: EdgeInsets.only(right: 6.0),
-                                              child: Icon(Icons.error_outline, size: 16, color: Colors.orange),
-                                            )
-                                          else
                                             Container(
                                               width: 8,
                                               height: 8,
@@ -253,36 +245,23 @@ class _ChatListState extends State<_ChatList> {
                                             ),
                                           const SizedBox(width: 8),
                                           Text(
-                                            showConfirm ? '等待确认发送' : '正在识别',
+                                            '正在识别',
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: showConfirm ? Colors.orange : AppTheme.accentColor,
+                                              color: AppTheme.accentColor,
                                               letterSpacing: 2,
                                             ),
                                           ),
                                         ],
                                       ),
                                       const SizedBox(height: 16),
-                                      if (showConfirm)
-                                        Text(
-                                          pendingText,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                            fontSize: 22,
-                                            color: Colors.white,
-                                            height: 1.6,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      if (showConfirm && showLive)
-                                        const SizedBox(height: 16),
                                       if (showLive)
                                         Text(
                                           liveText,
                                           textAlign: TextAlign.center,
-                                          style: TextStyle(
+                                          style: const TextStyle(
                                             fontSize: 18,
-                                            color: showConfirm ? Colors.white70 : Colors.white,
+                                            color: Colors.white,
                                             height: 1.6,
                                           ),
                                         ),
@@ -358,9 +337,7 @@ class _ChatListState extends State<_ChatList> {
 
             // 有历史记录时，实时识别气泡显示在底部（紧贴最新一页）
             if (showLive && messagePairs.isNotEmpty) 
-              _LiveRecognitionBubble(text: liveText, isConfirming: false),
-            if (showConfirm && messagePairs.isNotEmpty)
-              _LiveRecognitionBubble(text: pendingText, isConfirming: true),
+              _LiveRecognitionBubble(text: liveText),
           ],
         );
       },

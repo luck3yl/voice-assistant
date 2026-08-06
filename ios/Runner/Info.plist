@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>需要使用麦克风进行炼钢规程语音问答</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>需要使用语音识别进行本地唤醒词监听</string>
 </dict>
 </plist>

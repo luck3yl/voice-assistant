@@ -69,17 +69,15 @@ class _ConversationLayout extends StatelessWidget {
   }
 
   Widget _buildStatusText(ChatProvider chatProvider) {
-    if (voiceProvider.isConfirming) {
+    if (voiceProvider.isListening) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildSimpleText('等待确认发送...'),
+          _buildSimpleText('正在聆听...'),
           const SizedBox(height: 12),
           _buildVoiceCommandsPanel(['发送', '取消']),
         ],
       );
-    } else if (voiceProvider.isListening) {
-      return _buildSimpleText('正在聆听...');
     } else if (chatProvider.isAnswering) {
       return Column(
         mainAxisSize: MainAxisSize.min,

@@ -57,6 +57,7 @@ class AsrConfig {
 /// 后端 -> 前端 的流式消息类型
 enum AsrEventType {
   partial, // ASR 中间结果
+  confirm, // ASR 局部纠正段落（长句停顿后出）
   finalResult, // ASR 最终结果（一句话识别完成）
   wake, // 唤醒词命中
   speechStart, // 检测到说话开始
@@ -113,6 +114,8 @@ class AsrEvent {
       case 'interim':
       case 'temp':
         return AsrEvent(AsrEventType.partial, text);
+      case 'confirm':
+        return AsrEvent(AsrEventType.confirm, text);
       case 'final':
       case 'sentence':
         return AsrEvent(AsrEventType.finalResult, text);

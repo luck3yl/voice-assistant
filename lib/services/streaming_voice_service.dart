@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -47,8 +48,6 @@ class StreamingVoiceService implements VoiceService {
   bool _isListening = false; // 推流中
   bool _awaitingReply = false; // 已提交问题，正在等 AI 回复（期间暂停输入捕获）
   bool _awaitingFinal = false; // 已发 done，正在等后端 final
-  bool _awaitingConfirmation = false; // 等待用户确认发送
-  String _pendingQuestion = ''; // 等待确认的问题
   bool _disposed = false; // 已断开（阻止自动重连）
 
   Timer? _sleepTimer;
@@ -137,20 +136,8 @@ class StreamingVoiceService implements VoiceService {
         _callback?.onCommand(VoiceCommand.jumpToBottom);
       } else if (cmd == 'jumpToTop') {
         _callback?.onCommand(VoiceCommand.jumpToTop);
-      } else if (cmd == 'confirm') {
-        if (_awaitingConfirmation) {
-          final q = _pendingQuestion;
-          _awaitingConfirmation = false;
-          _pendingQuestion = '';
-          _submitQuestion(q);
-        }
       } else if (cmd == 'cancel') {
-        if (_awaitingConfirmation) {
-          _awaitingConfirmation = false;
-          _pendingQuestion = '';
-          _callback?.onConfirmationCancelled();
-          speak('已取消');
-        } else if (_awaitingReply || _isSpeaking) {
+        if (_awaitingReply || _isSpeaking) {
           // 在非确认态下（思考/播报中），“取消”等同于“停止”
           _awaitingReply = false;
           stopSpeaking();
@@ -159,10 +146,6 @@ class StreamingVoiceService implements VoiceService {
       }
     });
 
-    // 坚决执行指令：绝不使用后端做唤醒，完全死守前端本地引擎！
-    _useLocalWake = await _wakeDetector.initialize();
-    _log('local wake supported: $_useLocalWake');
-
     final hasPerm = await _recorder.hasPermission();
     if (!hasPerm) {
       _connected = false;
@@ -170,6 +153,9 @@ class StreamingVoiceService implements VoiceService {
       _callback?.onError('麦克风权限未授予');
       return;
     }
+
+    _useLocalWake = await _wakeDetector.initialize();
+    _log('local wake supported: $_useLocalWake');
 
     await _openSocket();
   }
@@ -201,13 +187,37 @@ class StreamingVoiceService implements VoiceService {
   // === WebSocket ===
   Future<void> _openSocket() async {
     try {
-      _log('connecting to $_wsUrl ...');
-      final channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
+      final currentSampleRate = kIsWeb ? 48000 : AsrConfig.sampleRate;
+      final currentChannels = AsrConfig.numChannels;
+      final platformName = kIsWeb
+          ? 'web'
+          : (defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android');
+
+      final uri = Uri.parse(_wsUrl).replace(queryParameters: {
+        'sample_rate': '$currentSampleRate',
+        'channels': '$currentChannels',
+        'platform': platformName,
+        'format': 'pcm16',
+      });
+
+      _log('connecting to $uri ... (sampleRate=${currentSampleRate}Hz, channels=$currentChannels)');
+      final channel = WebSocketChannel.connect(uri);
       await channel.ready;
       _channel = channel;
       _connected = true;
       _callback?.onConnectionChanged(true);
       _log('connected.');
+
+      // 连接建立后立刻给后端推首包配置 JSON 报文
+      final configMsg = jsonEncode({
+        'type': 'config',
+        'sample_rate': currentSampleRate,
+        'channels': currentChannels,
+        'format': 'pcm16',
+        'platform': platformName,
+      });
+      _channel?.sink.add(configMsg);
+      _log('sent initial audio config message: $configMsg');
 
       _wsSub = channel.stream.listen(
         _onWsMessage,
@@ -232,7 +242,6 @@ class StreamingVoiceService implements VoiceService {
     _channel = null;
     
     // 只有在等待 final 的时候断开，才视作会话中断。
-    // 千万不能在 _awaitingConfirmation 的时候退出，因为后端发完 final 后本身就可能会断开连接！
     if (_awaitingFinal) {
       _log('后端断开连接，放弃等待 final，退回休眠');
       _awaitingFinal = false;
@@ -263,13 +272,16 @@ class StreamingVoiceService implements VoiceService {
 
   void _onWsMessage(dynamic data) {
     _logRecvLatency();
-    // _log('recv(${data.runtimeType}): $data');
+    _log('recv(${data.runtimeType}): $data');
     if (data is! String) return;
     final event = AsrEvent.parse(data);
-    // _log('parsed: ${event.type} "${event.text}" (awake=$_isAwake)');
+    _log('parsed: ${event.type} "${event.text}" (awake=$_isAwake)');
     switch (event.type) {
       case AsrEventType.partial:
         _onPartial(event.text);
+        break;
+      case AsrEventType.confirm:
+        _onConfirm(event.text);
         break;
       case AsrEventType.finalResult:
         _onFinal(event.text);
@@ -310,8 +322,6 @@ class StreamingVoiceService implements VoiceService {
     _isAwake = false;
     _awaitingReply = false;
     _awaitingFinal = false;
-    _awaitingConfirmation = false;
-    _pendingQuestion = '';
     _hasSpoken = false;
     _finalFallbackTimer?.cancel();
     _resetPartialBuffer();
@@ -355,9 +365,9 @@ class StreamingVoiceService implements VoiceService {
           sampleRate: AsrConfig.sampleRate,
           numChannels: AsrConfig.numChannels,
           // 关闭自动增益：避免静音被放大，保证本地 VAD 能量判断可靠
-          echoCancel: true,
-          noiseSuppress: true,
-          autoGain: false,
+          echoCancel: false,
+          noiseSuppress: false,
+          autoGain: true,
         ),
       );
       _isListening = true;
@@ -368,12 +378,25 @@ class StreamingVoiceService implements VoiceService {
       _log('audio gate: 录音启动，丢弃前 ${AsrConfig.audioLeadInMs}ms 音频');
 
       var firstChunkLogged = false;
+      var bytesRecordedInSec = 0;
+      var lastSampleCheckAt = DateTime.now();
+
       _audioSub = stream.listen(
         (chunk) {
           // 播报中 / 等待 final 期间 不推流（允许在等回复期间推流以响应翻页指令）
           if (_isSpeaking || !_connected || _awaitingFinal) return;
           // 录音启动 / TTS 结束后的前几百毫秒丢弃，避免噪声/回声污染识别
           if (DateTime.now().isBefore(_audioGateUntil)) return;
+
+          bytesRecordedInSec += chunk.length;
+          final now = DateTime.now();
+          final elapsedMs = now.difference(lastSampleCheckAt).inMilliseconds;
+          if (elapsedMs >= 1000) {
+            final calculatedHz = (bytesRecordedInSec / 2 / (elapsedMs / 1000)).round();
+            bytesRecordedInSec = 0;
+            lastSampleCheckAt = now;
+          }
+
           _channel?.sink.add(chunk);
           _feedVad(chunk);
           if (!firstChunkLogged) {
@@ -459,8 +482,6 @@ class StreamingVoiceService implements VoiceService {
   Future<void> resumeListening() async {
     _awaitingReply = false;
     _awaitingFinal = false;
-    _awaitingConfirmation = false;
-    _pendingQuestion = '';
     _hasSpoken = false;
     _isAwake = false; // 回答完毕后自动进入休眠，必须使用唤醒词或"下一个问题"来开启新一轮
     _finalFallbackTimer?.cancel();

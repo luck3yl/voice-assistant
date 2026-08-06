@@ -21,26 +21,38 @@ extension StreamingVoiceResultHandling on StreamingVoiceService {
     return false;
   }
 
-  bool _tryHandleConfirmationCommand(String text) {
-    if (!_awaitingConfirmation) return false;
+  /// 允许在识别过程中，随时说“发送”或“取消”来立即中断并执行
+  bool _tryHandleImmediateAction(String text) {
+    if (text.isEmpty) return false;
+    final cleanText = text.replaceAll(RegExp(r'[，。！？,\.\!\?\s]+$'), '');
     
-    if (text.contains('确认') || text.contains('发送') || text.contains('对')) {
-      final q = _pendingQuestion;
-      _awaitingConfirmation = false;
-      _pendingQuestion = '';
-      if (!_awaitingFinal) _sendDone();
-      _resetPartialBuffer();
-      _submitQuestion(q);
-      return true;
-    } else if (text.contains('取消') || text.contains('不对') || text.contains('错') || text.contains('算了')) {
-      _awaitingConfirmation = false;
-      _pendingQuestion = '';
+    // 取消指令
+    if (cleanText.endsWith('取消') || cleanText.endsWith('退出') || cleanText.endsWith('算了') || cleanText.endsWith('不对')) {
       if (!_awaitingFinal) _sendDone();
       _resetPartialBuffer();
       _callback?.onConfirmationCancelled();
       speak('已取消');
       return true;
     }
+
+    // 发送指令
+    if (cleanText.endsWith('发送') || cleanText.endsWith('确认发送') || cleanText.endsWith('完毕') || cleanText.endsWith('确认')) {
+      String realQuestion = cleanText
+          .replaceAll(RegExp(r'(发送|确认发送|完毕|确认)$'), '')
+          .trim();
+      realQuestion = realQuestion.replaceAll(RegExp(r'[，。！？,\.\!\?\s]+$'), '');
+
+      if (!_awaitingFinal) _sendDone();
+      _resetPartialBuffer();
+
+      if (realQuestion.isNotEmpty) {
+        _submitQuestion(realQuestion);
+      } else {
+        _enterIdle();
+      }
+      return true;
+    }
+    
     return false;
   }
 
@@ -49,7 +61,7 @@ extension StreamingVoiceResultHandling on StreamingVoiceService {
     final frag = (_isAwake ? _extractAfterWakeWord(rawText) : rawText).trim();
     if (frag.isEmpty) return;
 
-    _accumulate(frag);
+    _accumulatePartial(frag);
     final fullText = _committed + _currentSeg;
 
     // 哪怕正在播报TTS，也要放行纯粹的翻页控制指令
@@ -62,10 +74,9 @@ extension StreamingVoiceResultHandling on StreamingVoiceService {
     // 非翻页指令，如果在播报则直接忽略
     if (_isSpeaking) return;
 
-    if (_awaitingConfirmation) {
-      if (_tryHandleConfirmationCommand(fullText)) {
-        return;
-      }
+    // 全局随时拦截发送/取消指令
+    if (_tryHandleImmediateAction(fullText)) {
+      return;
     }
 
     if (_awaitingReply) return;
@@ -101,6 +112,58 @@ extension StreamingVoiceResultHandling on StreamingVoiceService {
     _resetSleepTimer();
   }
 
+  /// 收到 confirm（长句停顿后的局部非流式纠错）：固化到 _committed 中，清空 _currentSeg
+  void _onConfirm(String rawText) {
+    final frag = (_isAwake ? _extractAfterWakeWord(rawText) : rawText).trim();
+    if (frag.isEmpty) return;
+
+    _committed += frag;
+    _currentSeg = '';
+    
+    final fullText = _committed;
+
+    if (_tryHandleScrollCommand(fullText)) {
+      if (!_awaitingFinal) _sendDone();
+      _resetPartialBuffer();
+      return;
+    }
+
+    if (_isSpeaking) return;
+
+    // 全局随时拦截发送/取消指令
+    if (_tryHandleImmediateAction(fullText)) {
+      return;
+    }
+
+    if (_awaitingReply) return;
+
+    _lastVoiceAt = DateTime.now();
+    _hasSpoken = true;
+
+    if (!_isAwake) {
+      if (_tryHandleScrollCommand(fullText)) {
+        _resetPartialBuffer();
+        if (!_awaitingFinal) _sendDone();
+        return;
+      }
+
+      if (_containsWakeWord(fullText)) {
+        _resetPartialBuffer();
+        _wake(after: fullText);
+      } else {
+        _armPrewakeCleanup();
+      }
+      return;
+    }
+
+    final full = fullText.trim();
+    if (full != _lastPartial) {
+      _lastPartial = full;
+      _callback?.onPartialResult(full);
+    }
+    _resetSleepTimer();
+  }
+
   /// 收到 final（带标点、已纠错的完整句）：替换显示 + 作为问题提交
   void _onFinal(String rawText) {
     final text = rawText.trim();
@@ -127,32 +190,52 @@ extension StreamingVoiceResultHandling on StreamingVoiceService {
 
     if (text.isEmpty) return;
 
+    // 根据 text 包含了全量还是增量决定拼接逻辑
+    String fullFinalText = text;
+    if (_committed.isNotEmpty) {
+      if (text.startsWith(_committed)) {
+        fullFinalText = text;
+      } else {
+        fullFinalText = _committed + text;
+      }
+    }
+
+    _submitFinalText(fullFinalText);
+  }
+
+  void _submitFinalText(String fullFinalText) {
+    if (fullFinalText.trim().isEmpty) return;
+
     if (!_isAwake) {
       // 休眠状态下，允许直接使用翻页指令
-      if (_tryHandleScrollCommand(text)) {
+      if (_tryHandleScrollCommand(fullFinalText)) {
         _resetPartialBuffer();
         return;
       }
 
-      // 未唤醒：final 里检测唤醒词
-      if (_containsWakeWord(text)) {
-        _wake(after: text);
+      // 未唤醒：里检测唤醒词
+      if (_containsWakeWord(fullFinalText)) {
+        _wake(after: fullFinalText);
       }
       _resetPartialBuffer();
       return;
     }
 
     _resetSleepTimer();
-    final question = _extractAfterWakeWord(text);
+    final question = _extractAfterWakeWord(fullFinalText);
     _resetPartialBuffer();
 
-    if (text.contains('下一个问题')) {
+    if (fullFinalText.contains('下一个问题')) {
       _callback?.onCommand(VoiceCommand.clearChat);
+    }
+
+    if (_tryHandleImmediateAction(fullFinalText)) {
+      return;
     }
 
     if (question.isEmpty) {
       // 纯唤醒词，根据具体词语给不同应答
-      speak(text.contains('下一个问题') ? '请说' : '我在');
+      speak(fullFinalText.contains('下一个问题') ? '请说' : '我在');
       return;
     }
 
@@ -163,67 +246,33 @@ extension StreamingVoiceResultHandling on StreamingVoiceService {
   void _handleRecognizedText(String text) {
     // 全局拦截控制指令，绕过确认流，直接执行！
     if (text.contains('下一页') || text.contains('往下翻')) {
-      _awaitingConfirmation = false;
-      _pendingQuestion = '';
       _callback?.onCommand(VoiceCommand.scrollDown);
       _resumeAfterTts(); // 重置状态
       return;
     }
     if (text.contains('上一页') || text.contains('往上翻')) {
-      _awaitingConfirmation = false;
-      _pendingQuestion = '';
       _callback?.onCommand(VoiceCommand.scrollUp);
       _resumeAfterTts(); // 重置状态
       return;
     }
     if (text.contains('最后一页') || text.contains('最后一夜')) {
-      _awaitingConfirmation = false;
-      _pendingQuestion = '';
       _callback?.onCommand(VoiceCommand.jumpToBottom);
       _resumeAfterTts(); // 重置状态
       return;
     }
     if (text.contains('第一页')) {
-      _awaitingConfirmation = false;
-      _pendingQuestion = '';
       _callback?.onCommand(VoiceCommand.jumpToTop);
       _resumeAfterTts(); // 重置状态
       return;
     }
     if (text.contains('返回') || text.contains('后退')) {
-      _awaitingConfirmation = false;
-      _pendingQuestion = '';
       _callback?.onCommand(VoiceCommand.goBack);
       _resumeAfterTts(); // 重置状态
       return;
     }
 
-    if (_awaitingConfirmation) {
-      // 正在等待确认，判断用户的回答
-      if (!_tryHandleConfirmationCommand(text)) {
-        // 如果后端发来的只是刚才 partial 结果的 final 确认，文字没变，直接忽略，防止打断前端引擎
-        if (text == _pendingQuestion) return;
-
-        // 说的是其他内容，当作新的问题覆盖并重新要求确认
-        _pendingQuestion = text;
-        _callback?.onConfirmationNeeded(text);
-        if (_useLocalWake) {
-          _stopStreaming().then((_) {
-            if (_awaitingConfirmation) _wakeDetector.safeRestart();
-          });
-        }
-      }
-    } else {
-      // 常规问题，进入确认流程
-      _awaitingConfirmation = true;
-      _pendingQuestion = text;
-      _callback?.onConfirmationNeeded(text);
-      if (_useLocalWake) {
-        _stopStreaming().then((_) {
-          if (_awaitingConfirmation) _wakeDetector.safeRestart();
-        });
-      }
-    }
+    // 直接作为问题提交，不再等待二次确认
+    _submitQuestion(text);
   }
 
   /// 提交问题：交给上层处理（指令/AI）
@@ -245,14 +294,13 @@ extension StreamingVoiceResultHandling on StreamingVoiceService {
     }
   }
 
-  void _accumulate(String frag) {
+  void _accumulatePartial(String frag) {
     if (_currentSeg.isEmpty) {
       _currentSeg = frag;
     } else if (_overlaps(frag, _currentSeg)) {
       _currentSeg = frag.length >= _currentSeg.length ? frag : _currentSeg;
     } else {
-      _committed += _currentSeg;
-      _currentSeg = frag;
+      _currentSeg += frag;
     }
   }
 

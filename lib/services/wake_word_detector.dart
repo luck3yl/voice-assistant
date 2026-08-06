@@ -37,7 +37,7 @@ class WakeWordDetector {
 
   /// 初始化（只会真正执行一次）
   Future<bool> initialize() async {
-    if (_initTried) return _available;
+    if (_initTried && _available) return _available;
     _initTried = true;
     try {
       _available = await _speech.initialize(
@@ -73,11 +73,8 @@ class WakeWordDetector {
     _speech.listen(
       onResult: _onResult,
       listenOptions: SpeechListenOptions(
-        // Web 端如果超过 8 秒没有说话，会抛出无法被 Flutter 捕获的 no-speech 原生异常导致彻底崩溃。
-        // 所以这里强行设置为每 7 秒就结束一次，通过 onStatus == 'done' 触发无限重启，完美避开崩溃陷阱！
         listenFor: const Duration(seconds: 7),
         pauseFor: const Duration(seconds: 7),
-        localeId: 'zh_CN',
         partialResults: true,
         cancelOnError: false,
       ),
