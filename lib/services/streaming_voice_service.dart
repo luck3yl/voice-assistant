@@ -11,7 +11,9 @@ import 'asr_config.dart';
 import 'voice_service.dart';
 import 'wake_word_detector.dart';
 import 'tts_stream_manager.dart';
+import 'app_logger.dart';
 part 'streaming_voice_service_vad.dart';
+
 part 'streaming_voice_service_result.dart';
 
 /// 实时流式语音服务（Web / Android / iOS 通用）
@@ -76,9 +78,11 @@ class StreamingVoiceService implements VoiceService {
 
   /// 唤醒词同音变体
   static const List<String> wakeWords = [
-    '小智', '小志', '小知', '小制', '小至', '小治', '晓智', '晓志', '小芝', '校智',
+    '小智', '小志', '小智小智', '小志小志', '小知', '小制', '小至', '小治', '晓智', '晓志', '小芝', '校智',
+    '小直', '小只', '小质', '萧智', '肖智', '小智智', '小志志',
     '下一个问题', '下个问题',
   ];
+
 
   /// 唤醒后的应答语
   static const String wakeAck = '请说';
@@ -94,8 +98,9 @@ class StreamingVoiceService implements VoiceService {
       Duration(milliseconds: AsrConfig.partialSilenceMs);
 
   void _log(String msg) {
-    if (AsrConfig.debug) debugPrint('[ASR] $msg');
+    AppLogger.instance.log('[ASR] $msg');
   }
+
 
   void _logRecvLatency() {
     if (!AsrConfig.debug) return;
@@ -126,7 +131,18 @@ class StreamingVoiceService implements VoiceService {
     await _initTts();
 
     _wakeDetector.setOnWake(_onWakeDetected);
-    _wakeDetector.setOnError((msg) => _log('wake detector: $msg'));
+    _wakeDetector.setOnError((msg) {
+      _log('wake detector: $msg');
+      if (msg.contains('permission') || msg.contains('notAvailable') || msg.contains('error_')) {
+        _log('wake detector 遇到系统权限限制 -> 自动打断并降级为 WebSocket 全量推流识别模式');
+        _useLocalWake = false;
+        _wakeDetector.stop();
+        if (!_isListening && !_isSpeaking) {
+          _startStreaming();
+        }
+      }
+    });
+
     _wakeDetector.setOnCommand((cmd) {
       if (cmd == 'scrollUp') {
         _callback?.onCommand(VoiceCommand.scrollUp);
@@ -193,12 +209,18 @@ class StreamingVoiceService implements VoiceService {
           ? 'web'
           : (defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android');
 
-      final uri = Uri.parse(_wsUrl).replace(queryParameters: {
-        'sample_rate': '$currentSampleRate',
-        'channels': '$currentChannels',
-        'platform': platformName,
-        'format': 'pcm16',
-      });
+      final uri = Uri.parse(_wsUrl).replace(
+        queryParameters: {
+          'sample_rate': '$currentSampleRate',
+          'channels': '$currentChannels',
+          'platform': platformName,
+          'format': 'pcm16',
+        },
+      );
+
+
+
+
 
       _log('connecting to $uri ... (sampleRate=${currentSampleRate}Hz, channels=$currentChannels)');
       final channel = WebSocketChannel.connect(uri);
@@ -358,18 +380,27 @@ class StreamingVoiceService implements VoiceService {
 
   Future<void> _startStreaming() async {
     try {
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        _log('startStream FAILED: 缺失麦克风权限');
+        _callback?.onError('缺少麦克风权限，请在手机设置中允许应用录音');
+        return;
+      }
+
       _log('startStream: pcm16 ${AsrConfig.sampleRate}Hz x${AsrConfig.numChannels}');
       final stream = await _recorder.startStream(
         const RecordConfig(
           encoder: AudioEncoder.pcm16bits,
           sampleRate: AsrConfig.sampleRate,
           numChannels: AsrConfig.numChannels,
-          // 关闭自动增益：避免静音被放大，保证本地 VAD 能量判断可靠
-          echoCancel: false,
-          noiseSuppress: false,
+          echoCancel: true,
+          noiseSuppress: true,
           autoGain: true,
         ),
       );
+
+
+
       _isListening = true;
       // 录音刚启动，丢弃前几百毫秒音频，避免麦克风激活噪声
       _audioGateUntil = DateTime.now().add(
@@ -437,7 +468,8 @@ class StreamingVoiceService implements VoiceService {
     _hasSpoken = false;
     _finalFallbackTimer?.cancel();
 
-    _isSpeakingWakeAck = (text == wakeAck);
+    _isSpeakingWakeAck = (text == '我在' || text == '请说' || text == wakeAck);
+
 
     if (!AsrConfig.ttsEnabled) {
       if (!_isSpeakingWakeAck) _callback?.onTtsStart();
@@ -477,17 +509,32 @@ class StreamingVoiceService implements VoiceService {
     _resumeAfterTts();
   }
 
-  /// AI \u56de\u590d\u5b8c\u6210\u4e14\u4e0d\u4f7f\u7528 TTS \u65f6\uff0c\u89e3\u9501 _awaitingReply \u5e76\u6062\u590d\u63a8\u6d41
   @override
   Future<void> resumeListening() async {
     _awaitingReply = false;
     _awaitingFinal = false;
     _hasSpoken = false;
-    _isAwake = false; // 回答完毕后自动进入休眠，必须使用唤醒词或"下一个问题"来开启新一轮
+    _isAwake = true; // 回答完毕后保持唤醒就绪状态
     _finalFallbackTimer?.cancel();
     _resetPartialBuffer();
     _resumeAfterTts();
   }
+
+  @override
+  void resetToIdle() {
+    stopSpeaking();
+    _isSpeaking = false;
+    _isSpeakingWakeAck = false;
+    _awaitingReply = false;
+    _awaitingFinal = false;
+    _hasSpoken = false;
+    _isAwake = false; // 切回首页：重置为未唤醒状态！
+    _finalFallbackTimer?.cancel();
+    _resetPartialBuffer();
+    _enterIdle(); // 立即重启 ASR 唤醒推流与本地引擎，确保在首页 100% 随时可唤醒！
+  }
+
+
 
   @override
   void feedTtsChunk(String chunk) {
@@ -576,3 +623,5 @@ class StreamingVoiceService implements VoiceService {
     return firstZh;
   }
 }
+
+

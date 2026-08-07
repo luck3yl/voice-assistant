@@ -15,6 +15,8 @@ import '../app.dart';
 import '../theme/app_theme.dart';
 import '../widgets/voice_orb.dart';
 import '../widgets/center_mic_orb.dart';
+
+
 part 'home_page_idle.dart';
 part 'home_page_conversation.dart';
 part 'home_page_top_bar.dart';
@@ -120,8 +122,13 @@ class _HomePageState extends State<HomePage> implements VoiceServiceCallback {
   void onCommand(VoiceCommand command) {
     switch (command) {
       case VoiceCommand.goBack:
-        _commandHandler.executeNavigation(command);
+        context.read<ChatProvider>().clearMessages();
+        context.read<VoiceProvider>().onTimeout();
+        _voiceService.stopSpeaking();
+        _voiceService.resetToIdle();
         break;
+
+
       case VoiceCommand.clearChat:
         context.read<ChatProvider>().clearMessages();
         break;
@@ -142,8 +149,16 @@ class _HomePageState extends State<HomePage> implements VoiceServiceCallback {
       case VoiceCommand.jumpToTop:
         _chatListKey.currentState?.jumpToTop();
         break;
+      case VoiceCommand.nextQuestion:
+        context.read<VoiceProvider>().prepareNextQuestion();
+        break;
+      case VoiceCommand.cancel:
+        context.read<VoiceProvider>().onConfirmationCancelled();
+        break;
     }
   }
+
+
 
   @override
   Widget build(BuildContext context) {

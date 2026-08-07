@@ -19,7 +19,7 @@ class _IdleLayout extends StatelessWidget {
           ),
         ),
 
-        // === 中央内容：气泡 + 语音球 + 状态（整屏水平居中，自适应缩放）===
+        // === 中央内容：气泡 + 语音球 + 状态（全宽自适应，不挤压中间内容）===
         Positioned(
           left: 0,
           right: 0,
@@ -30,12 +30,13 @@ class _IdleLayout extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 介绍气泡（限定宽度，居中）
-                if (!voiceProvider.hasEverWokenUp)
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 470),
-                    child: _IntroductionBubble(),
-                  ),
+                // 介绍气泡（待机首页始终完整展示欢迎语）
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  child: _IntroductionBubble(),
+                ),
+
+
                 const SizedBox(height: 24),
 
                 // 语音球 + 两侧声波（支持点击手动唤醒）
@@ -95,6 +96,11 @@ class _IdleLayout extends StatelessWidget {
             ),
           ),
         ),
+
+
+
+
+
 
         // === 顶部栏 ===
         Positioned(
@@ -222,11 +228,13 @@ class _IntroductionBubble extends StatelessWidget {
             '您可以随时向我提问炼钢相关的规程、工艺、参数、\n'
             '操作步骤及安全注意事项等内容。',
             style: TextStyle(
-              fontSize: 15,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
               color: Colors.white,
-              height: 1.9,
+              height: 1.7,
             ),
           ),
+
         ),
       ),
     );
@@ -358,4 +366,105 @@ class _LiveRecognitionBubble extends StatelessWidget {
     );
   }
 }
+
+// =============================================
+// 推荐示例问题组件（包含两条专业炼钢与热轧问题卡片）
+// =============================================
+class _RecommendedQuestions extends StatelessWidget {
+  const _RecommendedQuestions();
+
+  static const List<String> questions = [
+    '请阐述高炉操作中温度控制的重要性，并列举关于高炉炉顶温度和炉缸冷却水温差的具体安全监控要求。',
+    '热轧过程中，单道次压下率通常应控制在什么范围？压下率过大会导致什么缺陷？',
+  ];
+
+  void _onQuestionTap(BuildContext context, String questionText) {
+    final cleanText = questionText.trim();
+    context.read<VoiceProvider>().onSpeechEnd(cleanText);
+    context.read<ChatProvider>().sendMessage(cleanText);
+    getPlatformVoiceService().resumeListening();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Icon(Icons.auto_awesome, size: 16, color: AppTheme.accentColor),
+            const SizedBox(width: 6),
+            Text(
+              '您可以尝试这样问：',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.accentColor,
+                letterSpacing: 1,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...questions.map((q) => Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _onQuestionTap(context, q),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF07142A).withValues(alpha: 0.85),
+                      border: Border.all(
+                        color: AppTheme.accentColor.withValues(alpha: 0.45),
+                        width: 1,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            q,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.white,
+                              height: 1.5,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 14,
+                          color: AppTheme.accentColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            )),
+      ],
+    );
+  }
+}
+
+
+
+
+
 

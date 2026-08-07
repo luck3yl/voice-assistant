@@ -13,6 +13,8 @@ class _TopBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // 左侧 logo + 标题
+
+
           Expanded(
             child: FittedBox(
               fit: BoxFit.scaleDown,
@@ -91,7 +93,7 @@ class _TopBar extends StatelessWidget {
             ),
           ),
 
-          // 右侧设备信息
+          // 右侧设备信息（恢复初始样式）
           Expanded(
             child: FittedBox(
               fit: BoxFit.scaleDown,
@@ -117,9 +119,11 @@ class _TopBar extends StatelessWidget {
                     sublabel: _getCurrentDate(),
                   ),
                 ],
+
               ),
             ),
           ),
+
         ],
       ),
     );
@@ -194,3 +198,8 @@ class _DeviceInfoChip extends StatelessWidget {
     );
   }
 }
+
+
+
+
+

@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/voice_provider.dart';
+import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
+
 
 /// 语音交互球 - 核心视觉组件
 ///
@@ -178,7 +180,10 @@ class _VoiceOrbState extends State<VoiceOrb>
 
   /// 球体内部内容（声波图标）
   Widget _buildInnerContent(VoiceProvider provider) {
-    if (provider.isProcessing) {
+    final chatProvider = context.watch<ChatProvider>();
+    final isGenuinelyProcessing = provider.isProcessing && chatProvider.isLoading;
+
+    if (isGenuinelyProcessing) {
       return const SizedBox(
         width: 32,
         height: 32,
@@ -188,6 +193,7 @@ class _VoiceOrbState extends State<VoiceOrb>
         ),
       );
     }
+
 
     // 声波柱状图
     return Row(

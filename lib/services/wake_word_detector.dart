@@ -45,8 +45,12 @@ class WakeWordDetector {
         // Web 端的 speech_to_text 插件在报错时存在 JSON 序列化 Bug，因此不传递 onError，通过 onStatus == 'done' 兜底重启
         onError: kIsWeb ? null : (e) {
           _onError?.call(e.errorMsg);
-          _scheduleRestart();
+          if (!e.errorMsg.startsWith('error_')) {
+            _scheduleRestart();
+          }
         },
+
+
       );
     } catch (e) {
       _available = false;

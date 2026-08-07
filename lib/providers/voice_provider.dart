@@ -46,14 +46,32 @@ class VoiceProvider extends ChangeNotifier {
   bool get isProcessing => _state == VoiceState.processing;
   bool get isSpeaking => _state == VoiceState.speaking;
 
+  bool _isWaitingForNextQuestion = false;
+  bool get isWaitingForNextQuestion => _isWaitingForNextQuestion;
+
+  /// 用户点击或口述“下一个问题”：开启专属新一页等待输入
+  void prepareNextQuestion() {
+    _isWaitingForNextQuestion = true;
+    _state = VoiceState.awake;
+    _recognizedText = '';
+    notifyListeners();
+  }
+
+  void resetNextQuestionFlag() {
+    _isWaitingForNextQuestion = false;
+    notifyListeners();
+  }
+
   /// 唤醒词被触发
   void onWakeUp() {
     _state = VoiceState.awake;
+    _isWaitingForNextQuestion = true;
     _recognizedText = '';
     _errorMessage = '';
     _hasEverWokenUp = true;
     notifyListeners();
   }
+
 
   /// 检测到用户开始说话（VAD 触发）
   void onSpeechStart() {
@@ -63,28 +81,44 @@ class VoiceProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    _state = VoiceState.listening;
-    _recognizedText = '';
-    notifyListeners();
+    if (_isWaitingForNextQuestion) {
+      _state = VoiceState.listening;
+      _recognizedText = '';
+      notifyListeners();
+    }
   }
 
   /// 实时更新识别中间结果（边说边显示）
   void updatePartialResult(String text) {
+    // 只有在开口/点击了“下一个问题”或唤醒之后（_isWaitingForNextQuestion == true），才允许触发识别模式！
+    if (!_isWaitingForNextQuestion && _state != VoiceState.listening) {
+      return;
+    }
     _recognizedText = text;
-    // 收到识别文字说明用户正在说话，切到 listening 状态
-    if (_state == VoiceState.awake || _state == VoiceState.listening) {
-      _state = VoiceState.listening;
+    final trimmed = text.trim();
+    if (trimmed.isNotEmpty) {
+      if (_state == VoiceState.awake || _state == VoiceState.listening) {
+        _state = VoiceState.listening;
+      }
+    } else {
+      if (_state == VoiceState.listening) {
+        _state = VoiceState.awake;
+      }
     }
     notifyListeners();
   }
 
+
+
   /// 用户说话结束，进入处理阶段
   void onSpeechEnd(String finalText) {
     _state = VoiceState.processing;
+    _isWaitingForNextQuestion = false;
     // 识别文字已成为正式的对话消息，清空实时识别缓冲，避免残留在"正在识别"气泡里
     _recognizedText = '';
     notifyListeners();
   }
+
 
   /// AI 回复开始播报
   void onSpeakingStart() {
@@ -114,11 +148,16 @@ class VoiceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 超时无操作，回到休眠
+  /// 超时无操作或点击返回，完全复位回到待机首页
   void onTimeout() {
     _state = VoiceState.idle;
+    _hasEverWokenUp = false;
+    _isWaitingForNextQuestion = false;
+    _recognizedText = '';
+    _pendingQuestion = '';
     notifyListeners();
   }
+
 
   /// 更新音量
   void updateVolume(double level) {

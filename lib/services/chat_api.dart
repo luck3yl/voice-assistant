@@ -16,7 +16,10 @@ class ChatApi {
   ChatApi._();
 
   /// 问答流式接口地址
-  static const String endpoint = 'http://192.168.193.3:8001/api/chat/stream';
+  static const String endpoint =
+      'http://47.121.133.67:80/api/agent/deep_rag/api/chat/stream';
+
+
 
   /// 智能体名称
   static const String agentName = '钢铁设备知识助手';
@@ -131,14 +134,17 @@ class ChatApi {
       return _toPlain(text.substring(sep.end));
     }
 
-    // 还没出现分隔线
-    if (finished) {
-      // 兜底：如果对话已经结束，但大模型犯傻忘了写 `---` 分隔线
-      // 我们至少把整段文字作为答案兜底返回，保证页面上能显示出回答
-      return _toPlain(text); 
+    // 检查是否有明确的思考标记 <think> 或 THOUGHT
+    final hasThoughtTag = RegExp(r'<think>|\bTHOUGHT\b|\[TOOL\]', caseSensitive: false).hasMatch(text);
+    if (hasThoughtTag && !finished) {
+      // 含有思考标记且尚未输出分隔符时，等待分隔线
+      return '';
     }
-    return ''; // 思考/检索进行中，答案尚未开始
+
+    // 正常流式无思考标记、或流已结束：整段文本直接作为答案流式输出
+    return _toPlain(text);
   }
+
 
   /// 把 markdown 转成适合显示/朗读的纯文本
   static String _toPlain(String input) {

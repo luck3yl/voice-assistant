@@ -122,6 +122,8 @@ class ChatProvider extends ChangeNotifier {
         );
       }
 
+      _isThinkingState = false;
+      _isRetrieving = false;
       final finalAnswer = ChatApi.extractAnswer(lastRaw, finished: true);
       _updateAssistant(
         replyId,
@@ -129,16 +131,19 @@ class ChatProvider extends ChangeNotifier {
         content: finalAnswer.isEmpty ? '抱歉，没有获取到回答，请重试。' : finalAnswer,
         done: true,
       );
+
     } catch (e) {
+      debugPrint('[ChatApi Error] 无法连接问答接口 $e');
       _updateAssistant(
         replyId,
         reasoning: ChatApi.extractReasoning(lastRaw),
         content: ChatApi.extractAnswer(lastRaw, finished: true).isEmpty
-            ? '网络异常，请重试。'
+            ? '网络异常，请重试。($e)'
             : ChatApi.extractAnswer(lastRaw, finished: true),
         done: true,
       );
     } finally {
+
       _isLoading = false;
       _isRetrieving = false;
       _isThinkingState = false;
@@ -167,10 +172,14 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 清空对话
+  /// 清空对话并重置返回待机首页
   void clearMessages() {
     _messages.clear();
-    _messages.add(ChatMessage.system('对话已清空，请重新提问。'));
+    _hasEverChatted = false;
+    _isLoading = false;
+    _isRetrieving = false;
+    _isThinkingState = false;
     notifyListeners();
   }
 }
+

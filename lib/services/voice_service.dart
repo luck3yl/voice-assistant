@@ -57,7 +57,10 @@ enum VoiceCommand {
   scrollDown,       // "往下翻"
   jumpToBottom,     // "最后一页"
   jumpToTop,        // "第一页"
+  nextQuestion,     // "下一个问题"
+  cancel,           // "取消"
 }
+
 
 /// 语音服务回调接口
 abstract class VoiceServiceCallback {
@@ -107,6 +110,10 @@ abstract class VoiceService {
 
   /// 当 AI 回复完成且不需要 TTS 时，通知服务恢复监听（解锁 _awaitingReply）
   Future<void> resumeListening();
+
+  /// 切回待机首页：恢复到未唤醒待命状态
+  void resetToIdle();
+
 
   /// 设置播报音色（女声 / 男声）
   Future<void> setVoiceTimbre(VoiceTimbre timbre);
@@ -188,6 +195,12 @@ class MockVoiceService implements VoiceService {
   Future<void> resumeListening() async {
     // Mock: 无需操作
   }
+
+  @override
+  void resetToIdle() {
+    // Mock: 无需操作
+  }
+
 
   /// 模拟一次完整的语音交互流程
   Future<void> simulateInteraction(String question, String answer) async {
