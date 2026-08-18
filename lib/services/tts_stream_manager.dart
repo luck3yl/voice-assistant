@@ -68,7 +68,10 @@ class TtsStreamManager {
 
   void _checkMuteState() {
     if (!_isMuted) {
-      final match = RegExp(r'THOUGHT|\[TOOL\]|EVALUATION|---', caseSensitive: false).firstMatch(_buffer);
+      final match = RegExp(
+        r'THOUGHT|\[TOOL\]|EVALUATION|---|</?think>|</?response>|\bresponse\b|知识检索|我先|轮检索|技能',
+        caseSensitive: false,
+      ).firstMatch(_buffer);
       if (match != null) {
         _enqueueAndPlay(_buffer.substring(0, match.start));
         _isMuted = true;
@@ -99,17 +102,6 @@ class TtsStreamManager {
         _buffer = _buffer.replaceAll(RegExp(r'\[TOOL\]', caseSensitive: false), '_spoke_tool');
       }
 
-      // if (RegExp(r'EVALUATION', caseSensitive: false).hasMatch(_buffer)) {
-      //   if (_evalSpokenCount == 0) {
-      //     _ttsQueue.add("正在为您分析核心要点，马上为您呈现...");
-      //   } else if (_evalSpokenCount == 1) {
-      //     _ttsQueue.add("正在交叉验证多项规程，确保回答准确无误...");
-      //   }
-      //   _playNext();
-      //   _evalSpokenCount++;
-      //   _buffer = _buffer.replaceAll(RegExp(r'EVALUATION', caseSensitive: false), '_spoke_eval');
-      // }
-
       final docMatch = RegExp(r'本次检索到[\s\n\*]*(\d+)[\s\n\*]*篇[\s\n\*]*文档').firstMatch(_buffer);
       if (docMatch != null) {
         String count = docMatch.group(1)!;
@@ -135,7 +127,10 @@ class TtsStreamManager {
       int u5 = _buffer.indexOf('检索分析总结');
       int u6 = _buffer.indexOf('深度解析答案');
       
-      int unmuteIdx = _getEarliest([u1, u2, u3, u4, u5, u6]);
+      final respMatch = RegExp(r'(?:\n|^)\s*(?:</?think>|</?response>|\bresponse\b)\s*(?:\n|$)', caseSensitive: false).firstMatch(_buffer);
+      int u7 = respMatch != null ? respMatch.start : -1;
+      
+      int unmuteIdx = _getEarliest([u1, u2, u3, u4, u5, u6, u7]);
       if (unmuteIdx != -1) {
         _isMuted = false;
         _buffer = _buffer.substring(unmuteIdx);
@@ -195,6 +190,10 @@ class TtsStreamManager {
 
   String _purifyText(String raw) {
     String t = raw;
+
+    t = t.replaceAll(RegExp(r'</?think>', caseSensitive: false), '');
+    t = t.replaceAll(RegExp(r'</?response>', caseSensitive: false), '');
+    t = t.replaceAll(RegExp(r'(?:\n|^)\s*\bresponse\b\s*(?:\n|$)', caseSensitive: false), ' ');
 
     t = t.replaceAll(RegExp(r'###\s*.*检索分析总结.*'), '核实完毕，为您总结如下：');
     t = t.replaceAll(RegExp(r'###\s*.*深度解析答案.*'), '具体要求是：');

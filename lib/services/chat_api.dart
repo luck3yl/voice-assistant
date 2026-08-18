@@ -82,24 +82,52 @@ class ChatApi {
     return s;
   }
 
-  /// 从拼接后的原始文本里取出「思考过程」部分（`---` 分隔线之前），并清理标记。
-  /// 没有思考标记时返回空字符串。
+  /// 思考过程与最终答案的分隔符正则
+  /// 兼容：
+  /// - Markdown 分隔线: `---`, `***`, `___`
+  /// - XML/HTML 标签: `</think>`, `<think>`, `</response>`, `<response>`
+  /// - 独立行的 response 字符串 (例如 `\n\nresponse\n\n` 或 `\nresponse\n`)
+  static final RegExp _sepPattern = RegExp(
+    r'(?:\n|^)\s*(?:-{3,}|\*{3,}|_{3,}|</?think>|</?response>|\bresponse\b)\s*(?:\n|$)',
+    caseSensitive: false,
+  );
+
+  /// 识别思考/检索过程标记及前导引导句（如 "我先读取知识检索技能..."）
+  static final RegExp _thoughtPattern = RegExp(
+    r'<think>|<response>|\bTHOUGHT\b|\[TOOL\]|EVALUATION|知识检索|我先|技能|轮检索',
+    caseSensitive: false,
+  );
+
+  /// 判断文本中是否包含思考/答案分隔符
+  static bool hasSeparator(String text) {
+    var cleaned = text.replaceAll('\\n', '\n').replaceAll('\r\n', '\n').replaceAll('[DONE]', '');
+    return _sepPattern.hasMatch(cleaned);
+  }
+
+  /// 从拼接后的原始文本里取出「思考过程」部分（分隔符之前），并清理标记。
+  /// 没有思考过程时返回空字符串。
   static String extractReasoning(String raw) {
     var text = raw.replaceAll('\\n', '\n').replaceAll('\r\n', '\n');
     text = text.replaceAll('[DONE]', '');
 
-    // 兼容各种分隔符格式：比如行尾没有回车、有空格、或者是 ***，或者是 </think>
-    final sepPattern = RegExp(r'\n\s*(?:-{3,}|\*{3,}|_{3,})\s*(?:\n|$)|</think>', caseSensitive: false);
-    final sep = sepPattern.firstMatch(text);
-    final part = sep != null ? text.substring(0, sep.start) : text;
-
-    if (!RegExp(r'THOUGHT|\[TOOL\]|EVALUATION|<think>', caseSensitive: false)
-        .hasMatch(part)) {
-      return '';
+    final sep = _sepPattern.firstMatch(text);
+    if (sep != null) {
+      final part = text.substring(0, sep.start);
+      return _cleanReasoning(part);
     }
 
+    if (_thoughtPattern.hasMatch(text)) {
+      return _cleanReasoning(text);
+    }
+
+    return '';
+  }
+
+  static String _cleanReasoning(String part) {
     var cleaned = part
-        .replaceAll(RegExp(r'<think>\s*\n?', caseSensitive: false), '')
+        .replaceAll(RegExp(r'</?think>\s*\n?', caseSensitive: false), '')
+        .replaceAll(RegExp(r'</?response>\s*\n?', caseSensitive: false), '')
+        .replaceAll(RegExp(r'(?:\n|^)\s*\bresponse\b\s*(?:\n|$)', caseSensitive: false), '\n')
         .replaceAll(
             RegExp(r'\*{0,2}THOUGHT\*{0,2}\s*:?\s*', caseSensitive: false), '')
         .replaceAll(
@@ -118,33 +146,31 @@ class ChatApi {
     return cleaned;
   }
 
-  /// 从拼接后的原始文本里取出「最终答案」部分（`---` 分隔线之后），并清理 markdown。
+  /// 从拼接后的原始文本里取出「最终答案」部分（分隔符之后），并清理 markdown。
   ///
-  /// 答案总是在 `---` 分隔线之后。分隔线出现前一律返回空（视为思考/检索中），
-  /// 避免把逐字流入的思考过程（如 `**THOUGHT**`）误当答案显示。
-  /// [finished] 为 true 表示流已结束：此时若仍无分隔线且全程无思考标记，
+  /// 答案总是在分隔符（如 `response`、`</think>`、`---`）之后。
+  /// 分隔符出现前一律返回空（视为思考/检索中），避免把逐字流入的思考过程误当答案显示。
+  /// [finished] 为 true 表示流已结束：此时若仍无分隔符且全程无思考标记，
   /// 才把整段当作答案（兜底无思考过程的简单回答）。
   static String extractAnswer(String raw, {bool finished = false}) {
     var text = raw.replaceAll('\\n', '\n').replaceAll('\r\n', '\n');
     text = text.replaceAll('[DONE]', '');
 
-    final sepPattern = RegExp(r'\n\s*(?:-{3,}|\*{3,}|_{3,})\s*(?:\n|$)|</think>\s*(?:\n|$)?', caseSensitive: false);
-    final sep = sepPattern.firstMatch(text);
+    final sep = _sepPattern.firstMatch(text);
     if (sep != null) {
       return _toPlain(text.substring(sep.end));
     }
 
-    // 检查是否有明确的思考标记 <think> 或 THOUGHT
-    final hasThoughtTag = RegExp(r'<think>|\bTHOUGHT\b|\[TOOL\]', caseSensitive: false).hasMatch(text);
+    // 检查是否有明确的思考标记或前导引导句
+    final hasThoughtTag = _thoughtPattern.hasMatch(text);
+
     if (hasThoughtTag && !finished) {
-      // 含有思考标记且尚未输出分隔符时，等待分隔线
+      // 含有思考标记且尚未输出分隔符时，等待分隔符
       return '';
     }
 
-    // 正常流式无思考标记、或流已结束：整段文本直接作为答案流式输出
     return _toPlain(text);
   }
-
 
   /// 把 markdown 转成适合显示/朗读的纯文本
   static String _toPlain(String input) {
@@ -156,6 +182,8 @@ class ChatApi {
     t = t.replaceAll(RegExp(r'\[ERROR\]', caseSensitive: false), '');
     t = t.replaceAll(RegExp(r'\[TOOL\][^\n]*', caseSensitive: false), '');
     t = t.replaceAll(RegExp(r'</?think>', caseSensitive: false), '');
+    t = t.replaceAll(RegExp(r'</?response>', caseSensitive: false), '');
+    t = t.replaceAll(RegExp(r'(?:\n|^)\s*\bresponse\b\s*(?:\n|$)', caseSensitive: false), '\n');
     t = t.replaceAll(RegExp(r'\*{0,2}THOUGHT\*{0,2}\s*:?', caseSensitive: false), '');
     t = t.replaceAll(
         RegExp(r'\*{0,2}EVALUATION\*{0,2}\s*:?', caseSensitive: false), '');

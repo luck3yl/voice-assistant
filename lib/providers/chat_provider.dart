@@ -103,9 +103,13 @@ class ChatProvider extends ChangeNotifier {
         final lastToolIdx = upperRaw.lastIndexOf('[TOOL]');
         final lastThoughtIdx = upperRaw.lastIndexOf('THOUGHT');
         final lastThinkTagIdx = upperRaw.lastIndexOf('<THINK>');
-        final maxThoughtIdx = lastThoughtIdx > lastThinkTagIdx ? lastThoughtIdx : lastThinkTagIdx;
+        final lastRespTagIdx = upperRaw.lastIndexOf('<RESPONSE>');
+        final maxThoughtIdx = [lastThoughtIdx, lastThinkTagIdx, lastRespTagIdx].reduce((a, b) => a > b ? a : b);
         
-        if (lastToolIdx > maxThoughtIdx) {
+        if (ChatApi.hasSeparator(raw)) {
+          _isRetrieving = false;
+          _isThinkingState = false;
+        } else if (lastToolIdx > maxThoughtIdx) {
           _isRetrieving = true;
           _isThinkingState = false;
         } else if (maxThoughtIdx > lastToolIdx) {
