@@ -244,11 +244,8 @@ class _ConversationLayout extends StatelessWidget {
           context.read<VoiceProvider>().onSpeakingEnd();
         }
       }
-    }
-
- else if (command == '取消') {
-      context.read<VoiceProvider>().onConfirmationCancelled();
-      voiceService.stopSpeaking();
+    } else if (command == '取消') {
+      voiceService.cancelConfirmation();
     } else if (command == '上一页') {
       chatListKey.currentState?.scrollUp(voiceService);
     } else if (command == '下一页') {
@@ -261,10 +258,7 @@ class _ConversationLayout extends StatelessWidget {
       context.read<VoiceProvider>().prepareNextQuestion();
       voiceService.resumeListening();
       voiceService.speak('请说');
-    }
-
-
- else if (command == '停止') {
+    } else if (command == '停止') {
       context.read<VoiceProvider>().onSpeakingEnd();
       voiceService.stopSpeaking();
     } else if (command == '返回') {
@@ -272,4 +266,5 @@ class _ConversationLayout extends StatelessWidget {
       if (nav.canPop()) nav.pop();
     }
   }
+
 }

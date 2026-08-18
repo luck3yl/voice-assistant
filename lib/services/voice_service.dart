@@ -114,6 +114,9 @@ abstract class VoiceService {
   /// 切回待机首页：恢复到未唤醒待命状态
   void resetToIdle();
 
+  /// 取消确认/终止当前提问：清空底层语音缓冲区与状态
+  void cancelConfirmation();
+
 
   /// 设置播报音色（女声 / 男声）
   Future<void> setVoiceTimbre(VoiceTimbre timbre);
@@ -199,6 +202,13 @@ class MockVoiceService implements VoiceService {
   @override
   void resetToIdle() {
     // Mock: 无需操作
+  }
+
+  @override
+  void cancelConfirmation() {
+    stopSpeaking();
+    _callback?.onConfirmationCancelled();
+    _callback?.onPartialResult('');
   }
 
 

@@ -153,7 +153,7 @@ class _HomePageState extends State<HomePage> implements VoiceServiceCallback {
         context.read<VoiceProvider>().prepareNextQuestion();
         break;
       case VoiceCommand.cancel:
-        context.read<VoiceProvider>().onConfirmationCancelled();
+        _voiceService.cancelConfirmation();
         break;
     }
   }

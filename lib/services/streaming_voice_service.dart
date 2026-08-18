@@ -534,6 +534,19 @@ class StreamingVoiceService implements VoiceService {
     _enterIdle(); // 立即重启 ASR 唤醒推流与本地引擎，确保在首页 100% 随时可唤醒！
   }
 
+  @override
+  void cancelConfirmation() {
+    stopSpeaking();
+    _isSpeaking = false;
+    _awaitingReply = false;
+    if (!_awaitingFinal) _sendDone();
+    _awaitingFinal = false;
+    _finalFallbackTimer?.cancel();
+    _resetPartialBuffer();
+    _callback?.onConfirmationCancelled();
+    _callback?.onPartialResult('');
+  }
+
 
 
   @override
